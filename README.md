@@ -1,62 +1,67 @@
 # hello-world
 
-A classic Hello World application for testing purposes, built with Quarkus.
+A classic Hello World application for testing purposes, built with Quarkus. It's used for demonstrating JDK Flight Recorder (JFR) and Cryostat.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+## Endpoints
 
-## Running the application in dev mode
+The landing page at `/` links to all of them.
 
-You can run your application in dev mode that enables live coding using:
+| Endpoint | What it does | JFR events to look for |
+|---|---|---|
+| `/api` | Returns a greeting with the current time | |
+| `/api/hello/<name>` | Returns `Hello <name>!` | |
+| `/api/leak` | Keeps 1 MB more in memory with every request, until you restart the app | `jdk.OldObjectSample` |
+| `/api/garbage` | Creates 2 million short-lived strings per request | `jdk.ObjectAllocationSample`, `jdk.GarbageCollection` |
+| `/api/contention` | Holds a shared lock for 100 ms, so concurrent requests wait in line | `quarkus.Rest`, `jdk.JavaMonitorEnter` |
+| `/api/event` | Records a custom event | `com.test.HelloWorld` |
 
-```shell script
+The `quarkus.Rest` event is recorded for every endpoint.
+
+## Run the app
+
+You need Java 21 and Maven.
+
+```shell
 mvn quarkus:dev
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+Then open <http://localhost:8080/>.
 
-## Packaging and running the application
+## Record with JFR
 
-The application can be packaged using:
+Build the app and start it with a recording:
 
-```shell script
+```shell
 mvn package
+java -Xmx256m -XX:StartFlightRecording=name=demo,settings=profile -jar target/quarkus-app/quarkus-run.jar
 ```
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
+In a second terminal, send some requests. For example, to cause lock contention:
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
-
-If you want to build an _über-jar_, execute the following command:
-
-```shell script
-mvn package -Dquarkus.package.jar.type=uber-jar
+```shell
+seq 1 40 | xargs -P 10 -I{} curl -s -o /dev/null localhost:8080/api/contention
 ```
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+Save the recording and print the events you're interested in:
 
-## Creating a native executable
-
-You can create a native executable using:
-
-```shell script
-mvn package -Dnative
+```shell
+jcmd quarkus-run.jar JFR.dump name=demo path-to-gc-roots=true filename=demo.jfr
+jfr print --events jdk.JavaMonitorEnter demo.jfr
 ```
 
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
+The leak stays in memory until you restart the app, so run that demo last or on its own.
 
-```shell script
-mvn package -Dnative -Dquarkus.native.container-build=true
+## Build and push the container image
+
+You need Podman, and to be logged in to Quay. The script builds the app and pushes a multi-arch image for `linux/amd64` and `linux/arm64` to `quay.io/$QUAY_USER/hello-world:latest`.
+
+```shell
+export QUAY_USER=your-quay-username
+./build-push-container.sh
 ```
 
-You can then execute your native executable with: `./target/hello-world-1.0-runner`
+Then run the image:
 
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
-
-## Provided Code
-
-### REST
-
-Easily start your REST Web Services
-
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+```shell
+podman run --rm -p 8080:8080 quay.io/$QUAY_USER/hello-world:latest
+```
