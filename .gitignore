@@ -1,0 +1,13 @@
+# Maven
+target/
+
+# JFR recordings
+*.jfr
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# macOS
+.DS_Store
