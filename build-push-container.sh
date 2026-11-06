@@ -3,7 +3,15 @@
 # Stop at the first failed command
 set -euo pipefail
 
-IMAGE="quay.io/mostmark/hello-world:latest"
+# Fail if QUAY_USER is not set or empty
+if [[ -z "${QUAY_USER:-}" ]]; then
+  echo "Error: QUAY_USER is not set."
+  echo "Please export QUAY_USER before running this script, e.g.:"
+  echo "  export QUAY_USER=your-quay-username"
+  exit 1
+fi
+
+IMAGE="quay.io/$QUAY_USER/hello-world:latest"
 
 # Run from the project root, wherever the script is called from
 cd "$(dirname "$0")"
