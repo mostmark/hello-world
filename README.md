@@ -64,6 +64,30 @@ In JDK Mission Control:
 - **Java Application → Threads:** the `executor-thread-*` lanes show light orange bars while a thread waits for the lock, and blue bars while it holds the lock in `Thread.sleep()`.
 - **Event Browser → Java Application → Java Monitor Blocked:** each wait, with its duration and the stack trace pointing to `contention()`.
 
+### Record garbage collection
+
+If you've run the leak demo, restart the app first. Then start a recording as above and send 1,000 requests, 4 at a time:
+
+```shell
+seq 1 1000 | xargs -P 4 -I{} curl -s -o /dev/null localhost:8080/api/garbage
+```
+
+This takes about 10 seconds. Each request creates 2 million strings that are thrown away right after, so the garbage collector runs many times a second.
+
+Save and stop the recording, then print a summary of the GC pauses:
+
+```shell
+jcmd quarkus-run.jar JFR.dump name=demo filename=demo-garbage.jfr
+jcmd quarkus-run.jar JFR.stop name=demo
+jfr view gc-pauses demo-garbage.jfr
+```
+
+In JDK Mission Control:
+
+- **Java Application → Memory:** the heap usage rises and drops in a steady sawtooth. In the allocation table, `byte[]` is at the top. Expand its stack trace to find `garbage()`.
+- **JVM Internals → Garbage Collections:** hundreds of young collections, each pausing the app for well under a millisecond. The heap after each collection stays flat, unlike in the leak demo.
+- **JVM Internals → GC Summary:** the number of collections and the total and average pause time.
+
 ### Record a memory leak
 
 The leak stays in memory until you restart the app, so restart it before this demo. Then start a recording as above and send the leak requests one at a time, so the heap grows steadily:
