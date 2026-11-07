@@ -42,7 +42,9 @@ In a second terminal in the same directory, start a recording:
 jcmd quarkus-run.jar JFR.start name=demo settings=profile
 ```
 
-Send some requests. For example, to cause lock contention:
+### Record contention
+
+Send 40 requests, 10 at a time, so they wait in line for the shared lock:
 
 ```shell
 seq 1 40 | xargs -P 10 -I{} curl -s -o /dev/null localhost:8080/api/contention
@@ -51,12 +53,40 @@ seq 1 40 | xargs -P 10 -I{} curl -s -o /dev/null localhost:8080/api/contention
 Save and stop the recording, then print the events you're interested in:
 
 ```shell
-jcmd quarkus-run.jar JFR.dump name=demo path-to-gc-roots=true filename=demo.jfr
+jcmd quarkus-run.jar JFR.dump name=demo filename=demo-contention.jfr
 jcmd quarkus-run.jar JFR.stop name=demo
-jfr print --events jdk.JavaMonitorEnter demo.jfr
+jfr print --events jdk.JavaMonitorEnter demo-contention.jfr
 ```
 
-The leak stays in memory until you restart the app, so run that demo last or on its own.
+In JDK Mission Control:
+
+- **Java Application → Lock Instances:** the shared lock, a `java.lang.Object`, with how often and how long threads were blocked on it.
+- **Java Application → Threads:** the `executor-thread-*` lanes show light orange bars while a thread waits for the lock, and blue bars while it holds the lock in `Thread.sleep()`.
+- **Event Browser → Java Application → Java Monitor Blocked:** each wait, with its duration and the stack trace pointing to `contention()`.
+
+### Record a memory leak
+
+The leak stays in memory until you restart the app, so restart it before this demo. Then start a recording as above and send the leak requests one at a time, so the heap grows steadily:
+
+```shell
+for i in $(seq 1 150); do curl -s -o /dev/null localhost:8080/api/leak; sleep 0.2; done
+```
+
+This keeps about 150 MB in memory over 40 seconds. Don't send many more: the 256 MiB heap is full after about 248 requests.
+
+Save the recording while the app is still running, because the leaked objects are captured when you dump. `path-to-gc-roots=true` adds what keeps each object in memory.
+
+```shell
+jcmd quarkus-run.jar JFR.dump name=demo path-to-gc-roots=true filename=demo-memory-leak.jfr
+jcmd quarkus-run.jar JFR.stop name=demo
+jfr print --events jdk.OldObjectSample demo-memory-leak.jfr
+```
+
+In JDK Mission Control:
+
+- **Automated Analysis Results:** Heap Live Set Trend is red and names the static `LEAK` list.
+- **JVM Internals → Garbage Collections:** the heap after each collection keeps growing.
+- **Java Application → Memory → Live Objects:** expand the tree to see the leaked `byte[]` arrays, the `LEAK` list that holds them, and the line in `leak()` that allocated them.
 
 ## Build and push the container image
 
