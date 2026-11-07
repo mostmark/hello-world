@@ -29,23 +29,30 @@ Then open <http://localhost:8080/>.
 
 ## Record with JFR
 
-Build the app and start it with a recording:
+The app doesn't start a recording by itself. Build it and start it:
 
 ```shell
 mvn package
-java -Xmx256m -XX:StartFlightRecording=name=demo,settings=profile -jar target/quarkus-app/quarkus-run.jar
+java -Xmx256m -jar target/quarkus-app/quarkus-run.jar
 ```
 
-In a second terminal, send some requests. For example, to cause lock contention:
+In a second terminal in the same directory, start a recording:
+
+```shell
+jcmd quarkus-run.jar JFR.start name=demo settings=profile
+```
+
+Send some requests. For example, to cause lock contention:
 
 ```shell
 seq 1 40 | xargs -P 10 -I{} curl -s -o /dev/null localhost:8080/api/contention
 ```
 
-Save the recording and print the events you're interested in:
+Save and stop the recording, then print the events you're interested in:
 
 ```shell
 jcmd quarkus-run.jar JFR.dump name=demo path-to-gc-roots=true filename=demo.jfr
+jcmd quarkus-run.jar JFR.stop name=demo
 jfr print --events jdk.JavaMonitorEnter demo.jfr
 ```
 
@@ -65,3 +72,5 @@ Then run the image:
 ```shell
 podman run --rm -p 8080:8080 quay.io/$QUAY_USER/hello-world:latest
 ```
+
+The image uses a 256 MiB heap and the G1 garbage collector, the same as the `java` command above. It doesn't start a recording by itself either.
