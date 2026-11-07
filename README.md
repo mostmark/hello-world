@@ -88,6 +88,27 @@ In JDK Mission Control:
 - **JVM Internals → Garbage Collections:** hundreds of young collections, each pausing the app for well under a millisecond. The heap after each collection stays flat, unlike in the leak demo.
 - **JVM Internals → GC Summary:** the number of collections and the total and average pause time.
 
+### Record a custom event
+
+`/api/event` records `com.test.HelloWorld`, an event defined in the app itself. It has a message and is timed around a 42 ms pause. Start a recording as above and send 10 requests:
+
+```shell
+for i in $(seq 1 10); do curl -s -o /dev/null localhost:8080/api/event; done
+```
+
+Save and stop the recording, then show the events as a table:
+
+```shell
+jcmd quarkus-run.jar JFR.dump name=demo filename=demo-custom-event.jfr
+jcmd quarkus-run.jar JFR.stop name=demo
+jfr view com.test.HelloWorld demo-custom-event.jfr
+```
+
+In JDK Mission Control:
+
+- **Event Browser → Hello World → HelloWorld:** each event with its start time, duration of about 42 ms, the message `Hello World!`, the thread and the stack trace pointing to `event()`. The Hello World folder comes from the event's `@Category`.
+- **Java Application → Threads:** the events show up as bars in the `executor-thread-*` lane that handled the request.
+
 ### Record a memory leak
 
 The leak stays in memory until you restart the app, so restart it before this demo. Then start a recording as above and send the leak requests one at a time, so the heap grows steadily:

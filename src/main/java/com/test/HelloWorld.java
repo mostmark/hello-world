@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import jdk.jfr.Category;
 import jdk.jfr.Event;
 import jdk.jfr.Label;
 import jdk.jfr.Name;
@@ -84,6 +85,7 @@ public class HelloWorld {
 
     @Name("com.test.HelloWorld")
     @Label("HelloWorld")
+    @Category("Hello World")
     static class HelloWorldEvent extends Event {
         @Label("Message")
         String message;
